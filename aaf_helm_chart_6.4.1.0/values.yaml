@@ -1,0 +1,115 @@
+# Default values for aaf.
+
+replicaCount: 1
+
+image:
+  registry: mfsecurity
+  pullPolicy: IfNotPresent
+  pullSecretName:
+  # To create such secret:
+  # kubectl -n <namespace> create secret docker-registry regsecret --docker-server=<server> --docker-username=<username> --docker-password=<password> --docker-email=<email>
+
+aucore:
+  listenBacklog: 1024
+  resources: {}
+  #  requests:
+  #    memory: 1Gi
+  #    cpu: 1
+  externalDBSecret:
+  externalDBConfigMap:
+  externalESHost:
+  riskBootstrapService: "http://rbadataaccess:3000"
+  riskConfigService: "http://rbadataaccess:8888"
+  riskCollectorService: "http://rbacollector:8080"
+  riskUIService: "http://rbaui:8090"
+  encKeySecret:
+  awsSecret:
+  awsMarketPlaceSecret:
+  awsBillingS3:
+  appVersion: "6.4.1.0"
+  logToFile: true
+  baseName: aaf-aucore
+
+audb:
+  resources: {}
+  #  requests:
+  #    memory: 256Mi
+  #    cpu: 100m
+  storage: 1Gi
+  storageClass:
+  enabled: true
+  appVersion: "6.4.1.0"
+
+webd:
+  resources: {}
+  #  requests:
+  #    memory: 256Mi
+  #    cpu: 100m
+  appVersion: "6.4.1.0"
+  baseName: aaf-webd
+
+radiusd:
+  resources: {}
+  #  requests:
+  #    memory: 256Mi
+  #    cpu: 100m
+  appVersion: "6.4.1.0"
+  enabled: true
+
+searchd:
+  resources: {}
+  #  requests:
+  #    memory: 512Mi
+  #    cpu: 25m
+  storage: 1Gi
+  storageClass:
+  javaOpts: "-Xms512m -Xmx512m"
+  memoryLock: true
+  enabled: true
+  appVersion: "6.4.1.0"
+
+webauth:
+  resources: {}
+  #  requests:
+  #    memory: 1Gi
+  #    cpu: 100m
+  javaOpts: "-XX:MaxRAM=4g -XX:+ExitOnOutOfMemoryError -Dfile.encoding=UTF-8"
+  appVersion: "6.4.1.0"
+
+afisd:
+  resources: {}
+  appVersion: "6.4.1.0"
+
+fipsd:
+  resources: {}
+  appVersion: "6.4.1.0"
+
+repldb:
+  resources: {}
+  #  requests:
+  #    memory: 256Mi
+  #    cpu: 100m
+  enabled: true
+  appVersion: "6.4.1.0"
+
+redis:
+  resources: {}
+  #  requests:
+  #    memory: 256Mi
+  #    cpu: 100m
+  storage: 100Mi
+  appVersion: "6.4.1.0"
+
+lb:
+  enabled: false
+  type: LoadBalancer
+
+ingress:
+  enabled: false
+  annotations: {}
+  hosts: []
+  tls: {}
+
+nodeSelector: {}
+tolerations: []
+affinity: {}

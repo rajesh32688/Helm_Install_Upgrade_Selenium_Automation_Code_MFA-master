@@ -1,0 +1,533 @@
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: {{ template "aaf.fullname" . }}
+  labels:
+    app: {{ template "aaf.name" . }}
+    chart: {{ template "aaf.chart" . }}
+    release: {{ .Release.Name }}
+    heritage: {{ .Release.Service }}
+spec:
+  serviceName: {{ template "aaf.fullname" . }}
+  replicas: {{ .Values.replicaCount }}
+  selector:
+    matchLabels:
+      app: {{ template "aaf.name" . }}
+      release: {{ .Release.Name }}
+  podManagementPolicy: Parallel
+  template:
+    metadata:
+      labels:
+        app: {{ template "aaf.name" . }}
+        release: {{ .Release.Name }}
+      {{- if .Values.ingressexternal }}
+        ingressexternal: {{ .Values.ingressexternal | quote }}
+      {{- end }}
+    spec:
+      terminationGracePeriodSeconds: 1800
+      initContainers:
+        # https://www.elastic.co/guide/en/elasticsearch/reference/current/vm-max-map-count.html
+        - name: "sysctls"
+          image: "busybox"
+          command: [ "sysctl", "-w", "vm.max_map_count=262144", "net.core.somaxconn={{ .Values.aucore.listenBacklog }}" ]
+          securityContext:
+            privileged: true
+        - name: "db-migration-prepare"
+          image:  "busybox"
+          command: [ "chmod", "777", "/var/lib/postgresql/data" ]
+          securityContext:
+            privileged: true
+          volumeMounts:
+            - name: audb-data
+              mountPath: /var/lib/postgresql/data
+        - name: "db-migration"
+          image: {{ .Values.image.registry }}/aaf-db-migration:{{ .Values.audb.appVersion }}
+          command: [ "/usr/local/bin/docker-upgrade" ]
+          args: [ "/usr/local/bin/upgrade" ]
+          securityContext:
+            privileged: true
+          env:
+            - name: PGDATAOLD
+              value: /var/lib/postgresql/data/pgdata
+            - name: PGDATANEW
+              value: /var/lib/postgresql/data/pgdata12
+          volumeMounts:
+            - name: audb-data
+              mountPath: /var/lib/postgresql/data
+
+      containers:
+        - name: aucore
+          image: {{ .Values.image.registry }}/{{ .Values.aucore.baseName }}:{{ .Values.aucore.appVersion }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          env:
+            - name: LISTEN_BACKLOG
+              value: "{{ .Values.aucore.listenBacklog }}"
+            - name: HOST_IP
+              valueFrom:
+                fieldRef:
+                  fieldPath: status.podIP
+            - name: HOST_NAME
+              value: {{ template "aaf.fullname" . }}
+          {{- if .Values.aucore.externalDBSecret }}
+            - name: EXTERNAL_DB_URL
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.aucore.externalDBSecret }}
+                  key: external-db-url
+            - name: EXTERNAL_DB_SSLROOTCERT
+              value: /etc/postgresql/conf/ca-cert.pem
+          {{- end }}
+          {{- if .Values.aucore.encKeySecret }}
+            - name: EXTERNAL_ENC_KEY_PATH
+              value: /etc/aucore/encrypted_table/key.json
+          {{- end }}
+          {{- if .Values.aucore.externalESHost }}
+            - name: EXTERNAL_ES_HOST
+              value: "{{ .Values.aucore.externalESHost }}"
+          {{- end }}
+          {{- if .Values.aucore.riskBootstrapService }}
+            - name: RISK_BOOTSTRAP_SERVICE
+              value: "{{ .Values.aucore.riskBootstrapService }}"
+          {{- end }}
+          {{- if .Values.aucore.riskConfigService }}
+            - name: RISK_CONFIG_SERVICE
+              value: "{{ .Values.aucore.riskConfigService }}"
+          {{- end }}
+          {{- if .Values.aucore.riskCollectorService }}
+            - name: RISK_COLLECTOR_SERVICE
+              value: "{{ .Values.aucore.riskCollectorService }}"
+          {{- end }}
+          {{- if .Values.aucore.riskUIService }}
+            - name: RISK_UI_SERVICE
+              value: "{{ .Values.aucore.riskUIService }}"
+          {{- end }}
+          {{- if .Values.aucore.awsSecret }}
+            - name: AWS_ACCESS_KEY_ID
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.aucore.awsSecret }}
+                  key: aws-access-key
+            - name: AWS_SECRET_ACCESS_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.aucore.awsSecret }}
+                  key: aws-secret-key
+            - name: AWS_DEFAULT_REGION
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.aucore.awsSecret }}
+                  key: aws-region
+          {{- end }}
+          {{- if .Values.aucore.awsMarketPlaceSecret }}
+            - name: AWS_ACCESS_KEY_ID_MKPL
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.aucore.awsMarketPlaceSecret }}
+                  key: aws-access-key
+            - name: AWS_SECRET_ACCESS_KEY_MKPL
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.aucore.awsMarketPlaceSecret }}
+                  key: aws-secret-key
+            - name: AWS_DEFAULT_REGION_MKPL
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.aucore.awsMarketPlaceSecret }}
+                  key: aws-region
+          {{- end }}
+            - name: AUCORE_REDIRECT_STDERR
+              value: {{ .Values.aucore.logToFile | quote }}
+            {{- if (not .Values.aucore.logToFile) }}
+            - name: AUCORE_LOG_STDERR
+              value: ""
+            - name: AUCORE_LOG_STDOUT
+              value: ""
+            {{- end }}
+          securityContext:
+            capabilities:
+              add:
+                - SYS_RESOURCE  # increase number of open sockets for OOB daemon
+          volumeMounts:
+            - name: aucore-data
+              mountPath: /opt/AuCore/data
+            - name: logs
+              mountPath: /opt/AuCore/logs
+              subPath: aucore
+          {{- if .Values.audb.enabled }}
+            - name: audb-data
+              mountPath: /var/lib/postgresql/data
+              subPath: pgdata12
+          {{- end }}
+          {{- if .Values.aucore.externalDBConfigMap }}
+            - name: external-db-config
+              mountPath: /etc/postgresql/conf/ca-cert.pem
+              subPath: ca-cert.pem
+          {{- end }}
+          {{- if .Values.aucore.encKeySecret }}
+            - name: external-enc-key
+              mountPath: "/etc/aucore/encrypted_table"
+              readOnly: true
+          {{- end }}
+            - name: webd-config
+              mountPath: /etc/nginx/conf
+            - name: logs
+              mountPath: /var/log/nginx
+              subPath: webd
+            - name: webd-static
+              mountPath: /etc/nginx/html/static
+            - name: webauth-config
+              mountPath: /opt/osp/conf
+            - name: logs
+              mountPath: /opt/osp/tomcat/logs
+              subPath: webauth
+          {{- if .Values.radiusd.enabled }}
+            - name: radiusd-config
+              mountPath: /etc/freeradius
+            - name: logs
+              mountPath: /var/log/freeradius
+              subPath: radiusd
+          {{- end }}
+            - name: logs
+              mountPath: /var/log/nbisd
+              subPath: afisd
+            - name: logs
+              mountPath: /var/log/fipsd
+              subPath: fipsd
+          {{- if .Values.repldb.enabled }}
+            - name: repldb-engines
+              mountPath: /opt/symdb/engines
+            - name: repldb-tmp
+              mountPath: /opt/symdb/tmp
+            - name: logs
+              mountPath: /opt/symdb/logs
+              subPath: repldb
+          {{- end }}
+        {{- with .Values.aucore.resources }}
+          resources:
+{{ toYaml . | indent 12 }}
+        {{- end }}
+          readinessProbe:  # if unhealthy, container will be taken out of the list of service endpoints, it won't respond to requests
+            httpGet:
+              path: /api/v1/status
+              port: 443
+              scheme: HTTPS
+            initialDelaySeconds: 5  # number of sec after the container has started before the probe is initiated
+            periodSeconds: 10  # delay between executing probes
+            timeoutSeconds: 2  # num of sec of inactivity, after which the probe times out and container is taken out of the list of service endpoints
+            successThreshold: 1  # num of successful probes to put container back to service, default val is 1
+            failureThreshold: 3  # num of times container must fail before it's removed from the endpoint list
+
+      {{- if .Values.audb.enabled }}
+        - name: audb
+          image: {{ .Values.image.registry }}/aaf-audb:{{ .Values.audb.appVersion }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          env:
+            - name: PGDATAOLD
+              value: /var/lib/postgresql/data/pgdata
+            - name: PGDATANEW
+              value: /var/lib/postgresql/data/pgdata12
+            - name: PGDATA
+              value: /var/lib/postgresql/data/pgdata12
+          ports:
+            - name: pq
+              containerPort: 5432
+          volumeMounts:
+            - name: audb-data
+              mountPath: /var/lib/postgresql/data
+        {{- with .Values.audb.resources }}
+          resources:
+{{ toYaml . | indent 12 }}
+        {{- end }}
+      {{- end }}
+        - name: webd
+          image: {{ .Values.image.registry }}/{{ .Values.webd.baseName }}:{{ .Values.webd.appVersion }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          ports:
+            - name: https
+              containerPort: 443
+            - name: http
+              containerPort: 80
+          volumeMounts:
+            - name: webd-config
+              mountPath: /usr/local/nginx/conf
+            - name: logs
+              mountPath: /usr/local/nginx/logs
+              subPath: webd
+            - name: webd-static
+              mountPath: /usr/local/nginx/html/static
+          securityContext:
+            capabilities:
+              add:
+                - SYS_RESOURCE  # increase number of open sockets for OOB daemon
+        {{- with .Values.webd.resources }}
+          resources:
+{{ toYaml . | indent 12 }}
+        {{- end }}
+      {{- if .Values.radiusd.enabled }}
+        - name: radiusd
+          image: {{ .Values.image.registry }}/aaf-radiusd:{{ .Values.radiusd.appVersion }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          ports:
+            - name: radius-auth
+              protocol: UDP
+              containerPort: 1812
+          volumeMounts:
+            - name: radiusd-config
+              mountPath: /etc/raddb
+            - name: logs
+              mountPath: /var/log/radius
+              subPath: radiusd
+        {{- with .Values.radiusd.resources }}
+          resources:
+{{ toYaml . | indent 12 }}
+        {{- end }}
+      {{- end }}
+      {{- if .Values.searchd.enabled }}
+        - name: searchd
+          image: {{ .Values.image.registry }}/aaf-searchd:{{ .Values.searchd.appVersion }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          ports:
+            - name: es-rest
+              containerPort: 9200
+            - name: es-transport
+              containerPort: 9300
+          volumeMounts:
+            - name: searchd-data
+              mountPath: /usr/share/elasticsearch/data
+            - name: searchd-config
+              mountPath: /usr/share/elasticsearch/config
+            - name: aucore-data
+              mountPath: /opt/AuCore/data
+          env:
+            - name: ES_JAVA_OPTS
+              value: "{{ .Values.searchd.javaOpts }}"
+          securityContext:
+            capabilities:
+              add:
+                - SYS_RESOURCE
+                - IPC_LOCK  # docker --ulimit is not supported yet
+        {{- if .Values.searchd.memoryLock }}
+        # https://www.elastic.co/guide/en/elasticsearch/reference/current/setup-configuration-memory.html#mlockall
+          env:
+            - name: bootstrap.memory_lock
+              value: "true"
+        {{- end }}
+        {{- with .Values.searchd.resources }}
+          resources:
+{{ toYaml . | indent 12 }}
+        {{- end }}
+      {{- end }}
+        - name: webauth
+          image: {{ .Values.image.registry }}/aaf-webauth:{{ .Values.webauth.appVersion }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          volumeMounts:
+            - name: webauth-config
+              mountPath: /usr/local/tomcat/conf/osp
+            - name: logs
+              mountPath: /usr/local/tomcat/logs
+              subPath: webauth
+          env:
+            - name: JAVA_OPTS
+              value: "{{ .Values.webauth.javaOpts }}"
+            - name: JDK_JAVA_OPTIONS
+              value: "{{ .Values.webauth.javaOpts }}"
+        {{- with .Values.webauth.resources }}
+          resources:
+{{ toYaml . | indent 12 }}
+        {{- end }}
+        - name: afisd
+          image: {{ .Values.image.registry }}/aaf-afisd:{{ .Values.afisd.appVersion }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          volumeMounts:
+            - name: logs
+              mountPath: /var/log/nbisd
+              subPath: afisd
+        {{- with .Values.afisd.resources }}
+          resources:
+{{ toYaml . | indent 12 }}
+        {{- end }}
+        - name: fipsd
+          image: {{ .Values.image.registry }}/aaf-fipsd:{{ .Values.fipsd.appVersion }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          volumeMounts:
+            - name: logs
+              mountPath: /var/log/fipsd
+              subPath: fipsd
+        {{- with .Values.fipsd.resources }}
+          resources:
+{{ toYaml . | indent 12 }}
+        {{- end }}
+      {{- if .Values.repldb.enabled }}
+        - name: repldb
+          image: {{ .Values.image.registry }}/aaf-repldb:{{ .Values.repldb.appVersion }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          ports:
+            - name: sym-https
+              containerPort: 8080
+          volumeMounts:
+            - name: repldb-security
+              mountPath: /opt/symdb/security
+            - name: repldb-engines
+              mountPath: /opt/symdb/engines
+            - name: repldb-tmp
+              mountPath: /opt/symdb/tmp
+            - name: logs
+              mountPath: /opt/symdb/logs
+              subPath: repldb
+        {{- with .Values.repldb.resources }}
+          resources:
+{{ toYaml . | indent 12 }}
+        {{- end }}
+      {{- end }}
+        - name: redis
+          image: {{ .Values.image.registry }}/aaf-redis:{{ .Values.redis.appVersion }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          volumeMounts:
+            - name: redis-data
+              mountPath: /data
+        {{- with .Values.redis.resources }}
+          resources:
+{{ toYaml . | indent 12 }}
+        {{- end }}
+      volumes:
+      {{- if .Values.aucore.externalDBConfigMap }}
+        - name: external-db-config
+          configMap:
+            name: {{ .Values.aucore.externalDBConfigMap }}
+      {{- end }}
+      {{- if .Values.aucore.encKeySecret }}
+        - name: external-enc-key
+          secret:
+            secretName: {{ .Values.aucore.encKeySecret }}
+      {{- end }}
+    {{- with .Values.image.pullSecretName }}
+      imagePullSecrets:
+        - name: {{ . }}
+    {{- end }}
+    {{- with .Values.nodeSelector }}
+      nodeSelector:
+{{ toYaml . | indent 8 }}
+    {{- end }}
+    {{- with .Values.affinity }}
+      affinity:
+{{ toYaml . | indent 8 }}
+    {{- end }}
+    {{- with .Values.tolerations }}
+      tolerations:
+{{ toYaml . | indent 8 }}
+    {{- end }}
+  volumeClaimTemplates:
+    - metadata:
+        name: aucore-data
+      spec:
+        accessModes:
+          - ReadWriteOnce
+        resources:
+          requests:
+            storage: 10Mi
+    - metadata:
+        name: logs
+      spec:
+        accessModes:
+          - ReadWriteOnce
+        resources:
+          requests:
+            storage: 2Gi
+  {{- if .Values.audb.enabled }}
+    - metadata:
+        name: audb-data
+      spec:
+        accessModes:
+          - ReadWriteOnce
+        storageClassName: {{ .Values.audb.storageClass }}
+        resources:
+          requests:
+            storage: {{ .Values.audb.storage }}
+  {{- end }}
+    - metadata:
+        name: webd-config
+      spec:
+        accessModes:
+          - ReadWriteOnce
+        resources:
+          requests:
+            storage: 10Mi
+    - metadata:
+        name: webd-static
+      spec:
+        accessModes:
+          - ReadWriteOnce
+        resources:
+          requests:
+            storage: 100Mi
+    - metadata:
+        name: webauth-config
+      spec:
+        accessModes:
+          - ReadWriteOnce
+        resources:
+          requests:
+            storage: 10Mi
+  {{- if .Values.radiusd.enabled }}
+    - metadata:
+        name: radiusd-config
+      spec:
+        accessModes:
+          - ReadWriteOnce
+        resources:
+          requests:
+            storage: 10Mi
+  {{- end }}
+  {{- if .Values.searchd.enabled }}
+    - metadata:
+        name: searchd-data
+      spec:
+        accessModes:
+          - ReadWriteOnce
+        storageClassName: {{ .Values.searchd.storageClass }}
+        resources:
+          requests:
+            storage: {{ .Values.searchd.storage }}
+    - metadata:
+        name: searchd-config
+      spec:
+        accessModes:
+          - ReadWriteOnce
+        resources:
+          requests:
+            storage: 10Mi
+  {{- end }}
+  {{- if .Values.repldb.enabled }}
+    - metadata:
+        name: repldb-security
+      spec:
+        accessModes:
+          - ReadWriteOnce
+        resources:
+          requests:
+            storage: 10Mi
+    - metadata:
+        name: repldb-engines
+      spec:
+        accessModes:
+          - ReadWriteOnce
+        resources:
+          requests:
+            storage: 10Mi
+    - metadata:
+        name: repldb-tmp
+      spec:
+        accessModes:
+          - ReadWriteOnce
+        resources:
+          requests:
+            storage: 10Mi
+  {{- end }}
+    - metadata:
+        name: redis-data
+      spec:
+        accessModes:
+          - ReadWriteOnce
+        resources:
+          requests:
+            storage: {{ .Values.redis.storage }}

@@ -1,0 +1,30 @@
+{{- if .Values.ingress.enabled -}}
+apiVersion: networking.k8s.io/v1beta1
+kind: Ingress
+metadata:
+  name: {{ template "aaf.fullname" . }}
+  annotations:
+    ingress.kubernetes.io/ssl-passthrough: "true"
+  {{- range $key, $value := .Values.ingress.annotations }}
+    {{ $key }}: {{ $value | quote }}
+  {{- end }}
+  labels:
+    app: {{ template "aaf.name" . }}
+    chart: {{ template "aaf.chart" . }}
+    release: {{ .Release.Name }}
+    heritage: {{ .Release.Service }}
+spec:
+  rules:
+  {{- range .Values.ingress.hosts }}
+    - host: {{ . }}
+      http:
+        paths:
+          - backend:
+              serviceName: {{ template "aaf.fullname" $ }}
+              servicePort: 443
+  {{- end }}
+  tls:
+  {{- with .Values.ingress.tls }}
+{{ toYaml . | indent 4 }}
+  {{- end -}}
+{{- end }}
