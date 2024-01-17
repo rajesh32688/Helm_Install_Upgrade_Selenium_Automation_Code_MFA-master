@@ -4,9 +4,9 @@ ecr_name="627817533875.dkr.ecr.us-east-1.amazonaws.com"
 
 aws_region="us-east-1"
 
-application_properties="/var/lib/jenkins/workspace/Test_Pipepline_Selenium_Automation_MFA/application.properties"
+application_properties="/var/lib/jenkins/workspace/Helm_Install_Upgrade_With_Seleium_Automation/application.properties"
 
-helm_charts_path="/var/lib/jenkins/workspace/Test_Pipepline_Selenium_Automation_MFA/aaf_helm_chart"
+helm_charts_path="/var/lib/jenkins/workspace/Helm_Install_Upgrade_With_Seleium_Automation/aaf_helm_chart"
 helm_namespace="aaf-qa"
 helm_name="$helm_namespace-1"
 
