@@ -45,7 +45,7 @@ public class BeforeAndAfterClass {
 		inputs = new Properties();
 		try {
 			//inputFile = new FileInputStream(System.getProperty("user.dir")+"\\application.properties");
-			inputFile = new FileInputStream("/var/lib/jenkins/workspace/Test_Pipepline_Selenium_Automation_MFA/application.properties");
+			inputFile = new FileInputStream("/var/lib/jenkins/workspace/Helm_Install_Upgrade_With_Seleium_Automation/application.properties");
 			inputs.load(inputFile);
 		} catch (Exception e) {
 			// TODO Auto-generated catch block
