@@ -15,7 +15,6 @@ public class TestCases extends BeforeAndAfterClass{
 	@Test (dependsOnMethods={"doInstallAA"})
 	public void doAdminLogin() 
 	{
-		Thread.sleep(1 * 60 * 1000); //Wait for 1 minutes before the execution(temp add)
 		SignInPage signInPage = new SignInPage(driver, inputs.getProperty("AdminUserName"),inputs.getProperty("AdminUserPassword"));
 		signInPage.adminLogin();
 	}
