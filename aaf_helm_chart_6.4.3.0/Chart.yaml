@@ -1,0 +1,4 @@
+apiVersion: v1
+description: Advanced Authentication server
+name: aaf
+version: 1.18.1
