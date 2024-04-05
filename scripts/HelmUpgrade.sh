@@ -1,4 +1,6 @@
-docker_image_url="http://builder.provo.novell.com/perl-bin/zipper.py/artifacts/AA_Docker_Images/NAAF/6.4.3/AA_Docker_Images~6.4.3_B321_release_6.4.3_20240402_204158.zip?dockerimages/aauth-images.tgz"
+#docker_image_url="http://builder.provo.novell.com/perl-bin/zipper.py/artifacts/AA_Docker_Images/NAAF/6.4.3/AA_Docker_Images~6.4.3_B321_release_6.4.3_20240402_204158.zip?dockerimages/aauth-images.tgz"
+
+docker_image_url="http://builder.provo.novell.com/perl-bin/zipper.py/artifacts/AA_Docker_Images/NAAF/6.4.2/AA_Docker_Images~6.4.2_B354_release_6.4.2_20230830_082835.zip?dockerimages/aauth-images.tgz"
 
 ecr_name="627817533875.dkr.ecr.us-east-1.amazonaws.com"
 
