@@ -72,6 +72,19 @@ charts_path=$helm_charts_path\_$aaf_version
 sed -ri "{s/registry:.*/registry: $ecr_name/;}" $charts_path/values.yaml
 sed -ri "{s/appVersion:.*/appVersion: \"$aaf_version\"/;}" $charts_path/values.yaml
 sed -i 's/\r//g' $charts_path/values.yaml
+echo "Going to perform helm upgrade to $charts_path"
 echo "helm upgrade --namespace $helm_namespace $helm_name --set lb.enabled=true $charts_path"
 
+helm upgrade --namespace $helm_namespace $helm_name --set lb.enabled=true $charts_path
 ########################################################################################################################################
+
+
+echo "Going to sleep"
+sleep 10m 
+echo "Woke up from sleep"
+
+svc_lb=$(kubectl get svc -n $helm_namespace | awk 'END {print $4}')
+echo "Printing the URL of AA Server"
+echo https://$svc_lb
+echo "This is the after upgrade AAF Version $aaf_version"
+echo "This is the chart which was used $charts_path"
